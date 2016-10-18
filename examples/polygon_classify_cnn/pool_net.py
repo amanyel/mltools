@@ -46,11 +46,14 @@ class PoolNet(object):
                 to 0.001
             bit_depth (int): bit depth of the imagery trained on. Used for normalization
                 of chips. Defaults to 11.
+            kernel_size (int): size (in pixels) of the kernels to use at each
+                convolutional layer of the network. Defaults to 3 (standard for VGGNet)
     '''
 
     def __init__(self, classes=['No swimming pool', 'Swimming pool'], max_chip_hw=125,
                 min_chip_hw=0, batch_size=32, input_shape=(3, 125, 125), fc = False,
-                old_model=False, model_name=None, learning_rate = 0.001, bit_depth=11):
+                old_model=False, model_name=None, learning_rate = 0.001, bit_depth=11,
+                kernel_size=3):
 
         self.nb_classes = len(classes)
         self.classes = classes
@@ -62,6 +65,7 @@ class PoolNet(object):
         self.input_shape = input_shape
         self.lr = learning_rate
         self.bit_depth = bit_depth
+        self.kernel_size = kernel_size
         self.cls_dict = {classes[i]: i for i in xrange(len(self.classes))}
 
         if self.old_model:
@@ -88,39 +92,52 @@ class PoolNet(object):
 
         model = Sequential()
         model.add(ZeroPadding2D((1,1), input_shape=self.input_shape))
-        model.add(Convolution2D(64, 3, 3,activation='relu',input_shape=self.input_shape))
+        model.add(Convolution2D(64, self.kernel_size, self.kernel_size,activation='relu',
+                                input_shape=self.input_shape))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(64, 3, 3, activation='relu'))
+        model.add(Convolution2D(64, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(MaxPooling2D((2,2), strides=(2,2)))
 
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(128, 3, 3, activation='relu'))
+        model.add(Convolution2D(128, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(128, 3, 3, activation='relu'))
+        model.add(Convolution2D(128, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(MaxPooling2D((2,2), strides=(2,2)))
 
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(Convolution2D(256, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(Convolution2D(256, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(256, 3, 3, activation='relu'))
+        model.add(Convolution2D(256, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(MaxPooling2D((2,2), strides=(2,2)))
 
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(MaxPooling2D((2,2), strides=(2,2)))
 
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(ZeroPadding2D((1,1)))
-        model.add(Convolution2D(512, 3, 3, activation='relu'))
+        model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
         model.add(MaxPooling2D((2,2), strides=(2,2)))
 
         model.add(Flatten())
