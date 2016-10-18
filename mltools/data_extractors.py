@@ -242,11 +242,6 @@ def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
             chip_patch = np.pad(chip, [(0, 0), (pad_h/2, (pad_h - pad_h/2)), (pad_w/2,
                 (pad_w - pad_w/2))], 'constant', constant_values=0)
 
-            # # resize image
-            # if resize_dim:
-            #     if resize_dim != chip_patch.shape:
-            #         chip_patch = resize(chip_patch, resize_dim)
-
             if normalize:
                 div = (2 ** bit_depth) - 1
                 chip_patch /= float(div)
@@ -302,6 +297,7 @@ def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
                 Y[i, labels[i]] = 1
             data.append(Y)
         yield data
+        
 
 def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
                                classes=['No swimming pool', 'Swimming pool'],
@@ -445,6 +441,7 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
         data.append(Y)
 
     return data
+
 
 class getIterData(object):
     '''
