@@ -297,7 +297,7 @@ def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
                 Y[i, labels[i]] = 1
             data.append(Y)
         yield data
-        
+
 
 def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
                                classes=['No swimming pool', 'Swimming pool'],
@@ -428,19 +428,19 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
             sys.stdout.flush()
 
     # combine data
-    data = [np.array([i for i in inputs])]
+    inputs = [np.array([i for i in inputs])]
 
     if return_id:
-        data.append(ids)
+        inputs.append(ids)
 
     if return_labels:
         # format labels
         Y = np.zeros((len(labels), nb_classes))
         for i in range(len(labels)):
             Y[i, labels[i]] = 1
-        data.append(Y)
+        inputs.append(Y)
 
-    return data
+    return inputs
 
 
 class getIterData(object):
