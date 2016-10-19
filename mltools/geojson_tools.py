@@ -189,13 +189,15 @@ def find_unique_values(input_file, property_name):
                        for feat in features])
     return np.unique(values)
 
-def create_train_test(input_file, test_size=0.2):
+def create_train_test(input_file, output_name=None, test_size=0.2):
     '''
     Split a geojson file into train and test features. Saves features as geojsons in the
         working directory under the same file name with train and test prefixes to the
         original file name.
 
     INPUTS  input_file (string): File name
+            output_name (string): Name to use after the train_ and test_ prefixes for the
+                saved files. Defaults to name of input_file.
             test_size (float or int): Amount of features to set aside as test data. If
                 less than one will be interpreted as a proportion of the total feature
                 collection. Otherwise it is the amount of features to use as test data.
@@ -211,8 +213,11 @@ def create_train_test(input_file, test_size=0.2):
         test_size = int(test_size * len(features))
 
     # Name output files
-    test_out = 'test_{}'.format(input_file)
-    train_out = 'train_{}'.format(input_file)
+    if not output_name:
+        output_name = input_file
+
+    test_out = 'test_{}'.format(output_name)
+    train_out = 'train_{}'.format(output_name)
 
     # Create train and test files
     np.random.shuffle(features)
