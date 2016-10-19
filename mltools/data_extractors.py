@@ -448,7 +448,8 @@ class getIterData(object):
     A class for iteratively extracting chips from a geojson shapefile and one or more
         corresponding GeoTiff strips.
     INPUT   shapefile (string): name of shapefile to extract polygons from
-            batch_size (int): number of chips to generate per call of self.create_batch(). Defaults to 10000
+            batch_size (int): number of chips to generate per call of self.create_batch().
+                Defaults to 10000
             classes (list['string']): name of classes for chips. Defualts to swimming
                 pool classes (['Swimming_pool', 'No_swimming_pool'])
             min_chip_hw (int): minimum size acceptable (in pixels) for a polygon.
