@@ -12,13 +12,14 @@ from shapely.wkb import loads
 
 
 def join(input_files, output_file):
-    """Join geojsons into one. The spatial reference system of the
+    '''
+    Join geojsons into one. The spatial reference system of the
        output file is the same as the one of the last file in the list.
 
        Args:
            input_files (list): List of file name strings.
            output_file (str): Output file name.
-    """
+    '''
 
     # get feature collections
     final_features = []
@@ -35,7 +36,8 @@ def join(input_files, output_file):
 
 
 def split(input_file, file_1, file_2, no_in_first_file):
-    """Split a geojson in two separate files.
+    '''
+    Split a geojson in two separate files.
 
        Args:
            input_file (str): Input filename.
@@ -43,7 +45,7 @@ def split(input_file, file_1, file_2, no_in_first_file):
            file_2 (str): Output file name 2.
            no_features (int): Number of features in input_file to go to file_1.
            output_file (str): Output file name.
-    """
+    '''
 
     # get feature collection
     with open(input_file) as f:
@@ -61,7 +63,8 @@ def split(input_file, file_1, file_2, no_in_first_file):
 
 
 def get_from(input_file, property_names):
-    """Reads a geojson and returns a list of value tuples, each value
+    '''
+    Reads a geojson and returns a list of value tuples, each value
        corresponding to a property in property_names.
 
        Args:
@@ -70,7 +73,7 @@ def get_from(input_file, property_names):
 
        Returns:
            List of value tuples.
-    """
+    '''
 
     # get feature collections
     with open(input_file) as f:
@@ -84,7 +87,8 @@ def get_from(input_file, property_names):
 
 
 def write_to(data, property_names, output_file):
-    '''Write list of tuples to geojson.
+    '''
+    Write list of tuples to geojson.
        First entry of each tuple should be geometry in hex coordinates
        and the rest properties.
 
@@ -119,7 +123,8 @@ def write_to(data, property_names, output_file):
 
 def write_properties_to(data, property_names, input_file,
                         output_file, filter=None):
-    """Writes property data to polygon_file for all
+    '''
+    Writes property data to polygon_file for all
        geometries indicated in the filter, and creates output file.
        The length of data must be equal to the number of geometries in
        the filter. Existing property values are overwritten.
@@ -136,7 +141,7 @@ def write_properties_to(data, property_names, input_file,
                           'property_name'=value1, and so on. This makes sense only
                           if these values are unique. If Filter=None, then
                           data is written to all geometries in the input file.
-    """
+    '''
 
     with open(input_file) as f:
         feature_collection = geojson.load(f)
@@ -164,7 +169,8 @@ def write_properties_to(data, property_names, input_file,
 
 
 def find_unique_values(input_file, property_name):
-    """Find unique values of a given property in a geojson file.
+    '''
+    Find unique values of a given property in a geojson file.
 
        Args:
            input_file (str): File name.
@@ -173,7 +179,8 @@ def find_unique_values(input_file, property_name):
        Returns:
            List of distinct values of property.
            If property does not exist, it returns None.
-    """
+    '''
+
     with open(input_file) as f:
         feature_collection = geojson.load(f)
 
@@ -181,6 +188,43 @@ def find_unique_values(input_file, property_name):
     values = np.array([feat['properties'].get(property_name)
                        for feat in features])
     return np.unique(values)
+
+def create_train_test(input_file, test_size=0.2):
+    '''
+    Split a geojson file into train and test features. Saves features as geojsons in the
+        working directory under the same file name with train and test prefixes to the
+        original file name.
+
+    INPUTS  input_file (string): File name
+            test_size (float or int): Amount of features to set aside as test data. If
+                less than one will be interpreted as a proportion of the total feature
+                collection. Otherwise it is the amount of features to use as test data.
+                Defaults to 0.2.
+    '''
+
+    with open(input_file) as f:
+        data = geojson.load(f)
+        features = data['features']
+
+    # Convert test size from proportion to number of polygons
+    if test_size <= 1:
+        test_size = int(test_size * len(features))
+
+    # Name output files
+    test_out = 'test_{}'.format(input_file)
+    train_out = 'train_{}'.format(input_file)
+
+    # Create train and test files
+    np.random.shuffle(features)
+    train, test  = data.copy(), data
+    train['features'], test['features'] = features[test_size:], features[:test_size]
+
+    # Save files
+    with open(test_out, 'wb') as test_file:
+        geojson.dump(test, test_file)
+
+    with open(train_out, 'wb') as train_file:
+        geojson.dump(train, train_file)
 
 
 def create_balanced_geojson(geojson_file, output_file, balanced=True,
