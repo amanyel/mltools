@@ -51,9 +51,9 @@ class PoolNet(object):
     '''
 
     def __init__(self, classes=['No swimming pool', 'Swimming pool'], max_chip_hw=125,
-                min_chip_hw=0, batch_size=32, input_shape=(3, 125, 125), fc = False,
-                old_model=False, model_name=None, learning_rate = 0.001, bit_depth=11,
-                kernel_size=3):
+                min_chip_hw=0, batch_size=32, input_shape=(3, 125, 125), fc=False,
+                old_model=False, small_model=False, model_name=None, learning_rate = 0.001,
+                bit_depth=11, kernel_size=3):
 
         self.nb_classes = len(classes)
         self.classes = classes
@@ -62,6 +62,7 @@ class PoolNet(object):
         self.batch_size = batch_size
         self.fc = fc
         self.old_model = old_model
+        self.small_model = small_model
         self.input_shape = input_shape
         self.lr = learning_rate
         self.bit_depth = bit_depth
@@ -76,6 +77,10 @@ class PoolNet(object):
             self.nb_classes = self.model.output_shape[-1]
             self.input_shape = (self.model.input_shape[1], self.max_side_dim,
                                 self.max_side_dim)
+
+        elif self.small_model:
+            self.model = self._small_model()
+
         else:
             self.model = self._VGG_16()
 
@@ -137,6 +142,41 @@ class PoolNet(object):
                                 activation='relu'))
         model.add(ZeroPadding2D((1,1)))
         model.add(Convolution2D(512, self.kernel_size, self.kernel_size,
+                                activation='relu'))
+        model.add(MaxPooling2D((2,2), strides=(2,2)))
+
+        model.add(Flatten())
+        model.add(Dense(2048, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(2048, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(self.nb_classes, activation='softmax'))
+
+        sgd = SGD(lr=self.lr, decay=0.01, momentum=0.9, nesterov=True)
+        model.compile(optimizer = 'sgd', loss = 'categorical_crossentropy')
+        return model
+
+    def _small_model(self):
+        '''
+        Alternative model architecture with fewer layers for computationally expensive
+            training datasets
+        '''
+        print 'Compiling Small Net...'
+
+        model = Sequential()
+        model.add(ZeroPadding2D((1,1), input_shape=self.input_shape))
+        model.add(Convolution2D(64, self.kernel_size, self.kernel_size,activation='relu',
+                                input_shape=self.input_shape))
+        model.add(ZeroPadding2D((1,1)))
+        model.add(Convolution2D(64, self.kernel_size, self.kernel_size,
+                                activation='relu'))
+        model.add(MaxPooling2D((2,2), strides=(2,2)))
+
+        model.add(ZeroPadding2D((1,1)))
+        model.add(Convolution2D(128, self.kernel_size, self.kernel_size,
+                                activation='relu'))
+        model.add(ZeroPadding2D((1,1)))
+        model.add(Convolution2D(128, self.kernel_size, self.kernel_size,
                                 activation='relu'))
         model.add(MaxPooling2D((2,2), strides=(2,2)))
 
@@ -289,7 +329,7 @@ class PoolNet(object):
     def fit_from_geojson(self, train_shapefile, chips_per_batch = 5000,
                          batches_per_epoch=4, validation_split=0.1, save_model=None,
                          nb_epoch=10, shuffle_btwn_epochs=True, return_history=False,
-                         save_all_weights=True, retrain=False, lr_2=0.01):
+                         save_all_weights=True, retrain=False, lr_2=0.01, resize_dim=None):
         '''
         Fit a model using a generator that iteratively yields large batches of chips to
             train on for each epoch.
@@ -334,6 +374,7 @@ class PoolNet(object):
             self.model.compile(loss='categorical_crossentropy', optimizer='sgd')
 
         # load geojson polygons
+
         with open(train_shapefile) as f:
             polygons = geojson.load(f)['features'][:train_size]
 
@@ -350,14 +391,15 @@ class PoolNet(object):
             chips_per_batch = int((1 - validation_split) * chips_per_batch)
 
             # extract validation chips
-            print 'getting validation data'
+            print 'Getting validation data...\n'
             valX, valY = de.get_data_from_polygon_list(val_data, min_chip_hw=self.min_chip_hw,
                                                        max_chip_hw=self.max_chip_hw,
                                                        classes=self.classes, normalize=True,
                                                        return_labels=True,
                                                        bit_depth=self.bit_depth, mask=True,
-                                                       # show_percentage=False,
-                                                       assert_all_valid=True)
+                                                       show_percentage=False,
+                                                       assert_all_valid=True,
+                                                       resize_dim=resize_dim)
 
         for e in range(nb_epoch):
             # make diretory for saved weights
@@ -372,7 +414,6 @@ class PoolNet(object):
 
             # shuffle data to randomize net input
             if shuffle_btwn_epochs:
-                print 'shuffling data'
                 np.random.shuffle(polygons)
 
             for batch in range(batches_per_epoch):
@@ -386,8 +427,9 @@ class PoolNet(object):
                                                      classes=self.classes, normalize=True,
                                                      return_labels=True,
                                                      bit_depth=self.bit_depth, mask=True,
-                                                     # show_percentage=False,
-                                                     assert_all_valid=True)
+                                                     show_percentage=False,
+                                                     assert_all_valid=True,
+                                                     resize_dim=resize_dim)
 
                 # train with validation data
                 if validation_split > 0:
