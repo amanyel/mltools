@@ -225,11 +225,11 @@ def create_train_test(input_file, output_file=None, test_size=0.2):
     # Save train and test files
     data['features'] = features[:test_size]
     with open(test_out, 'wb') as test_file:
-        geojson.dump(test, test_file)
+        geojson.dump(data, test_file)
 
     data['features'] = features[test_size:]
     with open(train_out, 'wb') as train_file:
-        geojson.dump(train, train_file)
+        geojson.dump(data, train_file)
 
 
 def create_balanced_geojson(input_file, classes, output_file='balanced.geojson',
