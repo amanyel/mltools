@@ -224,7 +224,6 @@ def create_train_test(input_file, output_name=None, test_size=0.2):
     train, test  = data.copy(), data
     train['features'], test['features'] = features[test_size:], features[:test_size]
 
-    # Save files
     with open(test_out, 'wb') as test_file:
         geojson.dump(test, test_file)
 
@@ -260,7 +259,7 @@ def create_balanced_geojson(geojson_file, output_file, balanced=True,
         data = geojson.load(f)
 
     if balanced:
-        # sort classes into separate lists
+        # Sort classes into separate lists
         sorted_classes = []
 
         for i in class_names:
@@ -272,7 +271,7 @@ def create_balanced_geojson(geojson_file, output_file, balanced=True,
 
             sorted_classes.append(this_data)
 
-        # randomly select given number of samples per class
+        # Randomly select given number of samples per class
         if samples_per_class:
             samples = [random.sample(i, samples_per_class) for i in sorted_classes]
             final = [s for sample in samples for s in sample]
@@ -283,7 +282,7 @@ def create_balanced_geojson(geojson_file, output_file, balanced=True,
             class_sizes = len(sorted_classes[small_class_ix])
             final = sorted_classes[small_class_ix]
 
-            # randomly sample from larger classes to balance class sizes
+            # Randomly sample from larger classes to balance class sizes
             for i in xrange(len(class_names)):
                 if i == small_class_ix:
                     continue
