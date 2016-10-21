@@ -405,14 +405,14 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
         chip_patch = np.pad(chip, [(0, 0), (pad_h/2, (pad_h - pad_h/2)), (pad_w/2,
             (pad_w - pad_w/2))], 'constant', constant_values=0)
 
+        # resize chip
+        if resize_dim:
+            chip_patch = np.resize(chip_patch, resize_dim)
+
         # norm pixel intenisty from 0 to 1
         if normalize:
             div = (2 ** bit_depth) - 1
             chip_patch /= float(div)
-
-        # resize chip
-        if resize_dim:
-            chip_patch = np.resize(chip_patch, resize_dim)
 
         # get labels
         if return_labels:
