@@ -191,140 +191,6 @@ class PoolNet(object):
         model.compile(optimizer = 'sgd', loss = 'categorical_crossentropy')
         return model
 
-    def _get_behead_index(self, layer_names):
-        '''
-        helper function to find index where net flattens
-        INPUT   (1) list 'layer_names': names of each layer in model
-        OUTPUT  (1) int 'behead_ix': index of flatten layer
-        '''
-        for i, layer_name in enumerate(layer_names):
-            # Find first dense layer, remove preceeding dropout if applicable
-            if i > 0 and layer_name[:7] == 'flatten':
-                if layer_names[i-1][:7] != 'dropout':
-                    behead_ix = i
-                else:
-                    behead_ix = i - 1
-        return behead_ix
-
-    def _get_val_data(self, shapefile, val_size):
-        '''
-        hacky... don't use for actual training purposes.
-        creates validation data from input shapefile to use with fit_generator function
-        '''
-        # shuffle features in orig shapefile, use for val data
-        with open(shapefile) as f:
-            data = geojson.load(f)
-            feats = data['features']
-            np.random.shuffle(feats)
-            data['features'] = feats
-
-        with open('tmp_val.geojson', 'w') as f:
-            geojson.dump(data, f)
-
-        val_gen = getIterData('tmp_val.geojson', batch_size=val_size,
-                              min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
-                              classes=self.classes, bit_depth=self.bit_depth,
-                              show_percentage=False)
-
-        x, y = val_gen.next()
-        subprocess.call('rm tmp_val.geojson', shell=True)
-        return x, y
-
-    def make_fc_model(self):
-        '''
-        creates a fully convolutional model from self.model
-        '''
-        # get index of first dense layer in model
-        behead_ix = self._get_behead_index(self.model_layer_names)
-        model_layers = self.model.layers[:behead_ix]
-        # shape of image entering FC layers
-        inp_shape = self.model.layers[behead_ix - 1].get_output_shape_at(-1)
-
-        # replace dense layers with convolutions
-        model = Sequential()
-        model_layers += [Convolution2D(2048, 1, 1)]
-        model_layers += [Activation('relu')]
-        model_layers += [Convolution2D(2048, 1, 1)]
-        model_layers += [Activation('relu')]
-        model_layers += [Convolution2D(self.nb_classes, inp_shape[-1], inp_shape[-1])]
-        # must be same shape as target vector (None, num_classes, 1)
-        model_layers += [Reshape((self.nb_classes-1,1))]
-        model_layers += [Activation('softmax')]
-
-        print 'Compiling Fully Convolutional Model...'
-        for process in model_layers:
-            model.add(process)
-        sgd = SGD(lr=self.lr, momentum=0.9, nesterov=True)
-        model.compile(loss='categorical_crossentropy', optimizer='sgd')
-        print 'Done.'
-        return model
-
-
-    def fit_xy(self, X_train, Y_train, validation_split=0.1,
-               save_model = None, nb_epoch=15):
-        '''
-        Fit model on pre-loaded training data. Only for sizes small enough to fit in
-        memory
-        INPUT   (1) array 'X_train': training chips in the shape (train_size, 3, h, w)
-                (2) list 'Y_train': one-hot associated labels to X_train. shape =
-                train_size, n_classes)
-                (3) float 'validation_split': proportion of X_train to validate on.
-                (4) string 'save_model': name of model for saving. if None, does not
-                save model.
-                (5) int 'nb_epoch': Number of epochs to train for
-        OUTPUT  (1) trained model.
-        '''
-        # Define callback to save weights after each epoch
-        # es = EarlyStopping(monitor='val_loss', patience=1, verbose=1)
-        checkpointer = ModelCheckpoint(filepath="./models/ch_{epoch:02d}-{val_loss:.2f}.h5",
-                                       verbose=1)
-
-        self.model.fit(X_train, Y_train, validation_split=validation_split,
-                       callbacks=[checkpointer], nb_epoch=nb_epoch)
-
-        if save_model:
-            self.save_model(save_model)
-
-
-    def fit_generator(self, train_shapefile, train_size=10000, save_model=None,
-                      nb_epoch=5, validation_prop=0.1):
-        '''
-        Fit a model using a generator that yields a large batch of chips to train on.
-        INPUT   (1) string 'train_shapefile': filename for the training data (must be a
-                    geojson)
-                (2) int 'train_size': number of chips to train model on. Defaults to 10000
-                (3) string 'save_model': name of model for saving. if None, does not
-                    save model.
-                (4) int 'nb_epoch': Number of epochs to train for
-                (5) float 'validation_prop': proportion of training data to use for
-                    validation. defaults to 0.1. Does not do validation if validation_prop
-                    is None.
-        OUTPUT  (1) trained model.
-        '''
-        # es = EarlyStopping(monitor='val_loss', patience=1, verbose=1)
-        data_gen = getIterData(train_shapefile, batch_size=self.batch_size,
-                               min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
-                               classes=self.classes, bit_depth=self.bit_depth, cycle=True,
-                               show_percentage=False)
-
-        if validation_prop:
-            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{val_loss:.2f}.h5",
-                                           verbose=1)
-            valX, valY = self._get_val_data(train_shapefile,
-                                            int(validation_prop * train_size))
-
-            self.model.fit_generator(data_gen, samples_per_epoch=train_size,
-                                     nb_epoch=nb_epoch, callbacks=[checkpointer],
-                                     validation_data = (valX, valY))
-
-        else:
-            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{loss:.2f}.h5",
-                                           verbose=1)
-            self.model.fit_generator(data_gen, samples_per_epoch=train_size,
-                                     nb_epoch=nb_epoch, callbacks=[checkpointer])
-
-        if save_model:
-            self.save_model(save_model)
 
     def fit_from_geojson(self, train_shapefile, chips_per_batch = 5000,
                          batches_per_epoch=4, validation_split=0.1, save_model=None,
@@ -374,7 +240,6 @@ class PoolNet(object):
             self.model.compile(loss='categorical_crossentropy', optimizer='sgd')
 
         # load geojson polygons
-
         with open(train_shapefile) as f:
             polygons = geojson.load(f)['features'][:train_size]
 
@@ -462,18 +327,47 @@ class PoolNet(object):
         if return_history:
             return full_hist
 
+    def fit_on_images(self, X_train, Y_train, validation_split=0.1,
+                      save_model = None, nb_epoch=15):
+        '''
+        Fit model on training chips already loaded into memory
+
+        INPUT   X_train (array): Training chips with the following dimensions:
+                    (train_size, num_channels, rows, cols)
+                Y_train (list): One-hot encoded labels to X_train with dimenstions as
+                    follows: (train_size, n_classes)
+                validation_split (float): Proportion of X_train to validate on while
+                    training.
+                save_model (string): Name under which to save model. if None, does not
+                    save model. Defualts to None.
+                nb_epoch (int): Number of training epochs to complete
+        OUTPUT  trained Keras model.
+        '''
+        # Define callback to save weights after each epoch
+        checkpointer = ModelCheckpoint(filepath="./models/ch_{epoch:02d}-{val_loss:.2f}.h5",
+                                       verbose=1)
+
+        self.model.fit(X_train, Y_train, validation_split=validation_split,
+                       callbacks=[checkpointer], nb_epoch=nb_epoch)
+
+        if save_model:
+            self.save_model(save_model)
+
 
     def retrain_output(self, X_train, Y_train, learning_rate=0.01, **kwargs):
         '''
-        Retrains last dense layer of model. For use with unbalanced classes after
-        training on balanced data.
-        INPUT   (1) array 'X_train': training chips in the shape (train_size, 3, h, w)
-                (2) list 'Y_train': one-hot associated labels to X_train. shape =
-                (train_size, n_classes)
-                (3) float 'validation_split': proportion of X_train to validate on.
-                (4) string 'save_model': name of model for saving. if None, does not
-                save model.
-                (5) int 'nb_epoch': Number of epochs to train for
+        Retrains last dense layer of model on chips loaded into memory. For use with
+            unbalanced classes after training on balanced data.
+        INPUT   X_train(array): Training chips with the following dimensions:
+                    (train_size, num_channels, rows, cols)
+                Y_train (list): One-hot encoded labels to X_train with dimenstions as
+                    follows: (train_size, n_classes)
+                learning_rate (float): Learning rate
+                validation_split (float): Proportion of X_train to validate on while
+                    training.
+                save_model (string): Name under which to save model. if None, does not
+                    save model. Defualts to None.
+                nb_epoch (int): Number of training epochs to complete
         OUTPUT  (1) retrained model
         '''
         # freeze all layers except final dense
@@ -486,6 +380,117 @@ class PoolNet(object):
 
         # train model
         self.fit_xy(X_train, Y_train, **kwargs)
+
+
+    def _get_behead_index(self, layer_names):
+        '''
+        helper function to find index where net flattens
+        INPUT   (1) list 'layer_names': names of each layer in model
+        OUTPUT  (1) int 'behead_ix': index of flatten layer
+        '''
+        for i, layer_name in enumerate(layer_names):
+            # Find first dense layer, remove preceeding dropout if applicable
+            if i > 0 and layer_name[:7] == 'flatten':
+                if layer_names[i-1][:7] != 'dropout':
+                    behead_ix = i
+                else:
+                    behead_ix = i - 1
+        return behead_ix
+
+    def _get_val_data(self, shapefile, val_size):
+        '''
+        hacky... don't use for actual training purposes.
+        creates validation data from input shapefile to use with fit_generator function
+        '''
+        # shuffle features in orig shapefile, use for val data
+        with open(shapefile) as f:
+            data = geojson.load(f)
+            feats = data['features']
+            np.random.shuffle(feats)
+            data['features'] = feats
+
+        with open('tmp_val.geojson', 'w') as f:
+            geojson.dump(data, f)
+
+        val_gen = getIterData('tmp_val.geojson', batch_size=val_size,
+                              min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
+                              classes=self.classes, bit_depth=self.bit_depth,
+                              show_percentage=False)
+
+        x, y = val_gen.next()
+        subprocess.call('rm tmp_val.geojson', shell=True)
+        return x, y
+
+    def make_fc_model(self):
+        '''
+        creates a fully convolutional model from self.model
+        '''
+        # get index of first dense layer in model
+        behead_ix = self._get_behead_index(self.model_layer_names)
+        model_layers = self.model.layers[:behead_ix]
+        # shape of image entering FC layers
+        inp_shape = self.model.layers[behead_ix - 1].get_output_shape_at(-1)
+
+        # replace dense layers with convolutions
+        model = Sequential()
+        model_layers += [Convolution2D(2048, 1, 1)]
+        model_layers += [Activation('relu')]
+        model_layers += [Convolution2D(2048, 1, 1)]
+        model_layers += [Activation('relu')]
+        model_layers += [Convolution2D(self.nb_classes, inp_shape[-1], inp_shape[-1])]
+        # must be same shape as target vector (None, num_classes, 1)
+        model_layers += [Reshape((self.nb_classes-1,1))]
+        model_layers += [Activation('softmax')]
+
+        print 'Compiling Fully Convolutional Model...'
+        for process in model_layers:
+            model.add(process)
+        sgd = SGD(lr=self.lr, momentum=0.9, nesterov=True)
+        model.compile(loss='categorical_crossentropy', optimizer='sgd')
+        print 'Done.'
+        return model
+
+
+    def fit_generator(self, train_shapefile, train_size=10000, save_model=None,
+                      nb_epoch=5, validation_prop=0.1):
+        '''
+        Fit a model using a generator that yields a large batch of chips to train on.
+        INPUT   (1) string 'train_shapefile': filename for the training data (must be a
+                    geojson)
+                (2) int 'train_size': number of chips to train model on. Defaults to 10000
+                (3) string 'save_model': name of model for saving. if None, does not
+                    save model.
+                (4) int 'nb_epoch': Number of epochs to train for
+                (5) float 'validation_prop': proportion of training data to use for
+                    validation. defaults to 0.1. Does not do validation if validation_prop
+                    is None.
+        OUTPUT  (1) trained model.
+        '''
+        # es = EarlyStopping(monitor='val_loss', patience=1, verbose=1)
+        data_gen = getIterData(train_shapefile, batch_size=self.batch_size,
+                               min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
+                               classes=self.classes, bit_depth=self.bit_depth, cycle=True,
+                               show_percentage=False)
+
+        if validation_prop:
+            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{val_loss:.2f}.h5",
+                                           verbose=1)
+            valX, valY = self._get_val_data(train_shapefile,
+                                            int(validation_prop * train_size))
+
+            self.model.fit_generator(data_gen, samples_per_epoch=train_size,
+                                     nb_epoch=nb_epoch, callbacks=[checkpointer],
+                                     validation_data = (valX, valY))
+
+        else:
+            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{loss:.2f}.h5",
+                                           verbose=1)
+            self.model.fit_generator(data_gen, samples_per_epoch=train_size,
+                                     nb_epoch=nb_epoch, callbacks=[checkpointer])
+
+        if save_model:
+            self.save_model(save_model)
+
 
     def retrain_output_on_generator(self, train_shapefile, retrain_size=5000,
                                     learning_rate=0.01, save_model=None, nb_epoch=5,
