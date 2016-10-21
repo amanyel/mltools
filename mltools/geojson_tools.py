@@ -306,7 +306,7 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
     # load polygons
     with open(geojson_file) as f:
         data = geojson.load(f)
-    total_features = float(len(data['features']))
+        total_features = float(len(data['features']))
 
     # format output file name
     if not output_file.endswith('.geojson'):
@@ -314,7 +314,6 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
 
     # find indicies of acceptable polygons
     ix_ok, small_ix, large_ix = [], [], []
-    print 'Extracting image ids...'
     img_ids = find_unique_values(geojson_file, property_name='image_id')
 
     print 'Filtering polygons...'
@@ -373,7 +372,6 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
             pass
 
     # save new geojson
-    print 'Saving...'
     ok_polygons = [data['features'][i] for i in ix_ok]
     small_polygons = [data['features'][i] for i in small_ix]
     large_polygons = [data['features'][i] for i in large_ix]
@@ -391,15 +389,13 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
 
     if make_omitted_files:
         # make file with small polygons
-        small = {data.keys()[i]: data.values()[i] for i in xrange(len(data.keys()) - 1)}
-        small['features'] = small_polygons
+        filtrate['features'] = small_polygons
         with open('small_' + output_file, 'w') as f:
-            geojson.dump(small, f)
+            geojson.dump(filtrate, f)
 
         # make file with large polygons
-        large = {data.keys()[i]: data.values()[i] for i in xrange(len(data.keys()) - 1)}
-        large['features'] = large_polygons
+        filtrate['features'] = large_polygons
         with open('large_' + output_file, 'w') as f:
-            geojson.dump(large, f)
+            geojson.dump(filtrate, f)
 
     print 'Saved {} polygons to {}'.format(str(len(ok_polygons)), output_file)
