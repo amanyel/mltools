@@ -327,7 +327,7 @@ class PoolNet(object):
         if return_history:
             return full_hist
 
-    def fit_on_images(self, X_train, Y_train, validation_split=0.1,
+    def fit_xy(self, X_train, Y_train, validation_split=0.1,
                       save_model = None, nb_epoch=15):
         '''
         Fit model on training chips already loaded into memory
@@ -380,6 +380,83 @@ class PoolNet(object):
 
         # train model
         self.fit_xy(X_train, Y_train, **kwargs)
+
+
+
+    def save_model(self, model_name):
+        '''
+        INPUT   (1) string 'model_name': name to save model and weigths under, including
+        filepath but not extension
+        Saves current model as json and weigts as h5df file
+        '''
+        model = '{}.json'.format(model_name)
+        weights = '{}.h5'.format(model_name)
+        log = '{}.txt'.format(model_name)
+        json_string = self.model.to_json()
+        self.model.save_weights(weights)
+        with open(model, 'w') as f:
+            json.dump(json_string, f)
+
+        # make log for model train
+        time = localtime()
+        date = str(time[1]) + '-' + str(time[2]) + '-' + str(time[0]) + '\n' + \
+        str(time[3]) + ':' + str(time[4]) + ':' + str(time[5]) + '\n'
+        layers = str(self.model.layers)
+        with open(log, 'w') as l:
+            l.write(date + layers)
+
+
+    def load_model(self, model_name):
+        '''
+        INPUT  (1) string 'model_name': filepath to model
+        OUTPUT: Loaded model architecture
+        '''
+        print 'Loading model {}'.format(self.model_name)
+
+        #load model
+        with open(model_name + '.json') as f:
+            mod = model_from_json(json.load(f))
+        return mod
+
+
+    def classify_shapefile(self, shapefile, output_name, numerical_classes=True,
+                           img_name = None):
+        '''
+        Use the current model and weights to classify all polygons (of appropriate size)
+        in the given shapefile. Records PoolNet classification, whether or not it was
+        misclassified by PoolNet, and the certainty for the given class.
+        INPUT   shapefile (string): name of the shapefile to classify
+                output_name (string): name to give the classified shapefile
+                numerical_classes (bool): make output classifications numbers instead of
+                    strings. If False, class number will be used as the index to the
+                    classes argument (class 0 = self.classes[0]). Defaults to True.
+                image_name (string): name of the associated geotiff image if different
+                    than catalog number. Defaults to None
+        OUTPUT  (1) classified shapefile
+        '''
+        yprob, ytrue = [], []
+        if output_name[-8:] != '.geojson':
+            output_file = '{}.geojson'.format(output_name)
+        else:
+            output_file = output_name
+
+        # Classify all chips in input shapefile
+        for x in get_iter_data(shapefile, batch_size = 5000, classes = self.classes,
+                               max_chip_hw=self.input_shape[1], img_name=img_name,
+                               min_chip_hw = self.min_chip_hw, return_labels=False):
+            print 'Classifying polygons...'
+            yprob += list(self.model.predict_proba(x)) # use model to predict classes
+
+        # Get predicted class and certainty of classification results
+        yhat = [np.argmax(i) for i in yprob]
+        if not numerical_classes:
+            yhat = [self.classes[i] for i in yhat]
+        ycert = [str(np.max(j)) for j in yprob]
+
+        # Update shapefile, save as output_name
+        data = zip(yhat, ycert)
+        property_names = ['CNN_class', 'certainty']
+        write_properties_to(data, property_names, shapefile, output_file)
 
 
     def _get_behead_index(self, layer_names):
@@ -543,41 +620,6 @@ class PoolNet(object):
         if save_model:
             self.save_model(save_model)
 
-
-    def save_model(self, model_name):
-        '''
-        INPUT   (1) string 'model_name': name to save model and weigths under, including
-        filepath but not extension
-        Saves current model as json and weigts as h5df file
-        '''
-        model = '{}.json'.format(model_name)
-        weights = '{}.h5'.format(model_name)
-        log = '{}.txt'.format(model_name)
-        json_string = self.model.to_json()
-        self.model.save_weights(weights)
-        with open(model, 'w') as f:
-            json.dump(json_string, f)
-
-        # make log for model train
-        time = localtime()
-        date = str(time[1]) + '-' + str(time[2]) + '-' + str(time[0]) + '\n' + \
-        str(time[3]) + ':' + str(time[4]) + ':' + str(time[5]) + '\n'
-        layers = str(self.model.layers)
-        with open(log, 'w') as l:
-            l.write(date + layers)
-
-    def load_model(self, model_name):
-        '''
-        INPUT  (1) string 'model_name': filepath to model
-        OUTPUT: Loaded model architecture
-        '''
-        print 'Loading model {}'.format(self.model_name)
-
-        #load model
-        with open(model_name + '.json') as f:
-            mod = model_from_json(json.load(f))
-        return mod
-
     def evaluate_model(self, X_test, Y_test, return_yhat=False):
         '''
         Predicts classes of X_test and evaluates precision, recall and f1 score
@@ -593,45 +635,6 @@ class PoolNet(object):
 
         if return_yhat:
             return y_hat
-
-    def classify_shapefile(self, shapefile, output_name, numerical_classes=True,
-                           img_name = None):
-        '''
-        Use the current model and weights to classify all polygons (of appropriate size)
-        in the given shapefile. Records PoolNet classification, whether or not it was
-        misclassified by PoolNet, and the certainty for the given class.
-        INPUT   shapefile (string): name of the shapefile to classify
-                output_name (string): name to give the classified shapefile
-                numerical_classes (bool): make output classifications numbers instead of
-                    strings. If False, class number will be used as the index to the
-                    classes argument (class 0 = self.classes[0]). Defaults to True.
-                image_name (string): name of the associated geotiff image if different
-                    than catalog number. Defaults to None
-        OUTPUT  (1) classified shapefile
-        '''
-        yprob, ytrue = [], []
-        if output_name[-8:] != '.geojson':
-            output_file = '{}.geojson'.format(output_name)
-        else:
-            output_file = output_name
-
-        # Classify all chips in input shapefile
-        for x in get_iter_data(shapefile, batch_size = 5000, classes = self.classes,
-                               max_chip_hw=self.input_shape[1], img_name=img_name,
-                               min_chip_hw = self.min_chip_hw, return_labels=False):
-            print 'Classifying polygons...'
-            yprob += list(self.model.predict_proba(x)) # use model to predict classes
-
-        # Get predicted class and certainty of classification results
-        yhat = [np.argmax(i) for i in yprob]
-        if not numerical_classes:
-            yhat = [self.classes[i] for i in yhat]
-        ycert = [str(np.max(j)) for j in yprob]
-
-        # Update shapefile, save as output_name
-        data = zip(yhat, ycert)
-        property_names = ['CNN_class', 'certainty']
-        write_properties_to(data, property_names, shapefile, output_file)
 
 
 # Evaluation methods
