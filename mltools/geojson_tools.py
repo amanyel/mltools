@@ -288,21 +288,24 @@ def create_balanced_geojson(input_file, classes, output_file='balanced.geojson',
 def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon_hw=125,
                         shuffle=False, make_omitted_files=False):
     '''
-    Creates a geojson file containing only acceptable side dimensions for polygons.
-    INPUT   (1) string 'geojson_file': name of geojson with original samples
-            (2) string 'output_file': name of file in which to save selected polygons.
-            (3) int 'min_polygon_hw': minimum acceptable side length (in pixels) for
-                given polygon
-            (4) int 'max_polygon_hw': maximum acceptable side length (in pixels) for
-                given polygon
-            (5) bool 'shuffle': shuffle polygons before saving to output file. Defaults to
-                False
-            (6) bool 'make_omitted_files': create a file with omitted polygons. Two files
-                will be created, one with polygons that are too small and one with large
+    Create a geojson file containing only polygons with acceptable side dimensions.
+    INPUT   geojson_file (string): File name
+            output_file (string): Name under which to save filtered polygons.
+            min_polygon_hw (int): Minimum acceptable side length (in pixels) for
+                each polygon. Defaults to 0.
+            max_polygon_hw (int): Maximum acceptable side length (in pixels) for
+                each polygon. Defaults to 125.
+            shuffle (bool): Shuffle polygons before saving to output file. Defaults to
+                False.
+            make_omitted_files (bool): Create files with omitted polygons. Two files
+                are created: one with polygons that are too small and one with large
                 polygons. Defaults to False.
-    OUTPUT  (1) a geojson file (output_file.geojson) containing only polygons of
-                acceptable side dimensions
     '''
+    def write_status(percent_complete):
+        '''helper function to write percent complete to stdout'''
+        sys.stdout.write('\r%{0:.2f}'.format(percent_complete) + ' ' * 20)
+        sys.stdout.flush()
+
     # load polygons
     with open(geojson_file) as f:
         data = geojson.load(f)
@@ -316,14 +319,15 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
     ix_ok, small_ix, large_ix = [], [], []
     img_ids = find_unique_values(geojson_file, property_name='image_id')
 
-    print 'Filtering polygons...'
+    print 'Filtering polygons... \n'
     for img_id in img_ids:
         ix = 0
-        print '... for image {}'.format(img_id)
+        print '... for image {} \n'.format(img_id)
         img = geoio.GeoImage(img_id + '.tif')
 
         # create vrt if img has multiple bands (more efficient)
         if img.shape[0] > 1:
+            vrt_flag = True
             vrt_cmd = 'gdalbuildvrt tmp.vrt -b 1 {}.tif'.format(img_id)
             subprocess.call(vrt_cmd, shell=True) #saves temporary vrt file to filter on
             img = geoio.GeoImage('tmp.vrt')
@@ -333,43 +337,32 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
                                                 properties=True,
                                                 filter=[{'image_id': img_id}],
                                                 mask=True):
+            ix += 1
             if chip is None:
-                ix += 1
-                # add percent complete to stdout
-                sys.stdout.write('\r%{0:.2f}'.format(100 * ix / total_features) + ' ' * 20)
-                sys.stdout.flush()
+                write_status(100 * ix / total_features)
                 continue
 
             chan,h,w = np.shape(chip)
 
             # Identify small chips
             if min(h, w) < min_polygon_hw:
-                small_ix.append(ix)
-                ix += 1
-                sys.stdout.write('\r%{0:.2f}'.format(100 * ix / total_features) + ' ' * 20)
-                sys.stdout.flush()
+                small_ix.append(ix - 1)
+                write_status(100 * ix / total_features)
                 continue
 
             # Identify large chips
             elif max(h, w) > max_polygon_hw:
-                large_ix.append(ix)
-                ix += 1
-                sys.stdout.write('\r%{0:.2f}'.format(100 * ix / total_features) + ' ' * 20)
-                sys.stdout.flush()
+                large_ix.append(ix - 1)
+                write_status(100 * ix / total_features)
                 continue
 
             # Identify valid chips
-            ix_ok.append(ix)
-            ix += 1
-            # add percent complete to stdout
-            sys.stdout.write('\r%{0:.2f}'.format(100 * ix / total_features) + ' ' * 20)
-            sys.stdout.flush()
+            ix_ok.append(ix - 1)
+            write_status(100 * ix / total_features)
 
         # remove vrt file
-        try:
+        if vrt_flag:
             os.remove('tmp.vrt')
-        except:
-            pass
 
     # save new geojson
     ok_polygons = [data['features'][i] for i in ix_ok]
@@ -381,21 +374,19 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
     if shuffle:
         np.random.shuffle(ok_polygons)
 
-    filtrate = {data.keys()[i]: data.values()[i] for i in xrange(len(data.keys()))}
-    filtrate['features'] = ok_polygons
-
+    data['features'] = ok_polygons
     with open(output_file, 'wb') as f:
-        geojson.dump(filtrate, f)
+        geojson.dump(data, f)
 
     if make_omitted_files:
         # make file with small polygons
-        filtrate['features'] = small_polygons
+        data['features'] = small_polygons
         with open('small_' + output_file, 'w') as f:
-            geojson.dump(filtrate, f)
+            geojson.dump(data, f)
 
         # make file with large polygons
-        filtrate['features'] = large_polygons
+        data['features'] = large_polygons
         with open('large_' + output_file, 'w') as f:
-            geojson.dump(filtrate, f)
+            geojson.dump(data, f)
 
     print 'Saved {} polygons to {}'.format(str(len(ok_polygons)), output_file)
