@@ -271,7 +271,7 @@ class PoolNet(object):
             if save_all_weights:
                 chk = ModelCheckpoint(filepath="./models/epoch" + str(e) + \
                                       "_{val_loss:.2f}.h5",
-                                      verbose=1)
+                                      verbose=1, save_weights_only = True)
                 if 'models' not in os.listdir('.'):
                     subprocess.call('mkdir models', shell=True)
 
@@ -710,7 +710,7 @@ def filter_by_classification(shapefile, output_name, max_cert=0.75, min_cert=0.5
             continue
 
         if misclass == missed:
-            if cert >= min_cert and cert >= max_cert:
+            if cert >= min_cert and cert <= max_cert:
                 ok_polygons.append(geom)
 
     # Save filtered polygons to nex shapefile
