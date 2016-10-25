@@ -345,7 +345,7 @@ class PoolNet(object):
         '''
         # Define callback to save weights after each epoch
         checkpointer = ModelCheckpoint(filepath="./models/ch_{epoch:02d}-{val_loss:.2f}.h5",
-                                       verbose=1)
+                                       verbose=1, save_weights_only=True)
 
         self.model.fit(X_train, Y_train, validation_split=validation_split,
                        callbacks=[checkpointer], nb_epoch=nb_epoch)
@@ -419,44 +419,64 @@ class PoolNet(object):
         return mod
 
 
-    def classify_shapefile(self, shapefile, output_name, numerical_classes=True,
-                           img_name = None):
+    def classify_geojson(self, geoj, output_name, numerical_classes=True,
+                         resize_dim=None, img_name=None):
         '''
         Use the current model and weights to classify all polygons (of appropriate size)
-        in the given shapefile. Records PoolNet classification, whether or not it was
+        in the given geojson. Records PoolNet classification, whether or not it was
         misclassified by PoolNet, and the certainty for the given class.
-        INPUT   shapefile (string): name of the shapefile to classify
-                output_name (string): name to give the classified shapefile
+        INPUT   geoj (string): name of the geojson to classify
+                output_name (string): name to give the classified geojson
                 numerical_classes (bool): make output classifications numbers instead of
                     strings. If False, class number will be used as the index to the
                     classes argument (class 0 = self.classes[0]). Defaults to True.
+                resize_dim (tuple): Dimensions to resize image to.
                 image_name (string): name of the associated geotiff image if different
                     than catalog number. Defaults to None
-        OUTPUT  (1) classified shapefile
         '''
+
         yprob, ytrue = [], []
-        if output_name[-8:] != '.geojson':
-            output_file = '{}.geojson'.format(output_name)
-        else:
+        if output_name.endswith('.geojson'):
             output_file = output_name
+        else:
+            output_file = '{}.geojson'.format(output_name)
 
-        # Classify all chips in input shapefile
-        for x in get_iter_data(shapefile, batch_size = 5000, classes = self.classes,
-                               max_chip_hw=self.input_shape[1], img_name=img_name,
-                               min_chip_hw = self.min_chip_hw, return_labels=False):
-            print 'Classifying polygons...'
-            yprob += list(self.model.predict_proba(x)) # use model to predict classes
+        # Open get chips from geojson
+        with open(geoj) as f:
+            features = geojson.load(f)['features']
 
-        # Get predicted class and certainty of classification results
+        # Classeify in batches of 1000
+        for ix in xrange(0, len(features), 1000):
+            this_batch = features[ix: (ix + 1000)]
+            try:
+                X = de.get_data_from_polygon_list(this_batch,
+                                                  min_chip_hw=self.min_chip_hw,
+                                                  max_chip_hw=self.max_chip_hw,
+                                                  classes=self.classes, normalize=True,
+                                                  return_labels=False,
+                                                  bit_depth=self.bit_depth, mask=True,
+                                                  show_percentage=False,
+                                                  assert_all_valid=True,
+                                                  resize_dim=resize_dim)
+            except (AssertionError):
+                raise ValueError('Please filter the input geojson file using ' \
+                                 'geojoson_tools.filter_geojson() and ensure all ' \
+                                 'polygons are valid before using this method.')
+
+            # Predict classes of test data
+            yprob += list(self.model.predict_proba(X))
+
+        # Get predicted classes and certainty
         yhat = [np.argmax(i) for i in yprob]
+        ycert = [str(np.max(j)) for j in yprob]
         if not numerical_classes:
             yhat = [self.classes[i] for i in yhat]
-        ycert = [str(np.max(j)) for j in yprob]
 
-        # Update shapefile, save as output_name
+        # Update geojson, save as output_name
         data = zip(yhat, ycert)
         property_names = ['CNN_class', 'certainty']
-        write_properties_to(data, property_names, shapefile, output_file)
+        write_properties_to(data, property_names=property_names, input_file=geoj,
+                            output_file=output_file)
 
 
     def _get_behead_index(self, layer_names):
@@ -551,7 +571,7 @@ class PoolNet(object):
 
         if validation_prop:
             checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{val_loss:.2f}.h5",
-                                           verbose=1)
+                                           verbose=1, save_weights_only=True)
             valX, valY = self._get_val_data(train_shapefile,
                                             int(validation_prop * train_size))
 
@@ -561,7 +581,7 @@ class PoolNet(object):
 
         else:
             checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{loss:.2f}.h5",
-                                           verbose=1)
+                                           verbose=1, save_weights_only=True)
             self.model.fit_generator(data_gen, samples_per_epoch=train_size,
                                      nb_epoch=nb_epoch, callbacks=[checkpointer])
 
@@ -604,7 +624,7 @@ class PoolNet(object):
 
         if validation_prop:
             checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{val_loss:.2f}.h5",
-                                           verbose=1)
+                                           verbose=1, save_weights_only=True)
             valX, valY = self._get_val_data(train_shapefile,
                                             int(validation_prop * retrain_size))
 
@@ -614,7 +634,7 @@ class PoolNet(object):
 
         else:
             checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{loss:.2f}.h5",
-                                           verbose=1)
+                                           verbose=1, save_weights_only=True)
             self.model.fit_generator(data_gen, samples_per_epoch=retrain_size)
 
         if save_model:
