@@ -4,6 +4,7 @@ import numpy as np
 import os, random
 import json, geojson
 
+from mltools import geojson_tools as gt
 from mltools.data_extractors import get_data_from_polygon_list as get_chips
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.models import Sequential, model_from_json
@@ -459,5 +460,5 @@ class PoolNet(object):
         # Update geojson, save as output_name
         data = zip(yhat, ycert)
         property_names = ['CNN_class', 'certainty']
-        write_properties_to(data, property_names=property_names,
-                            input_file=target_geojson, output_file=output_name)
+        gt.write_properties_to(data, property_names=property_names,
+                               input_file=target_geojson, output_file=output_name)
