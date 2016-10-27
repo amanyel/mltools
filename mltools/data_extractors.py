@@ -382,10 +382,9 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
                 sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 5)
                 sys.stdout.flush()
             if assert_all_valid:
-                raise AssertionError('Invalid polygon with feature id {}. Please make ' \
+                raise AssertionError('One or more invalid polygons. Please make ' \
                                      'sure all polygons are valid or set ' \
-                                     'assert_all_valid to ' \
-                                     'False.'.format(str(poly['properties']['image_id'])))
+                                     'assert_all_valid to False.')
             continue
 
         # check for adequate chip size
@@ -397,7 +396,7 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
                 sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 5)
                 sys.stdout.flush()
             if assert_all_valid:
-                raise AssertionError('Polygon with feature id {} does not meet the size ' \
+                raise AssertionError('One or more polygons do not meet the size ' \
                                      'requirements. Please filter the geojson first or ' \
                                      'set assert_all_valid to False.')
             continue
