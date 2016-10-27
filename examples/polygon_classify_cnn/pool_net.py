@@ -46,6 +46,8 @@ class PoolNet(object):
                 to 0.001
             bit_depth (int): bit depth of the imagery trained on. Used for normalization
                 of chips. Defaults to 11.
+            small_model (bool): use a model with nine layers instead of 16. Will train
+                faster. Defaults to False.
             kernel_size (int): size (in pixels) of the kernels to use at each
                 convolutional layer of the network. Defaults to 3 (standard for VGGNet)
     '''
@@ -53,7 +55,7 @@ class PoolNet(object):
     def __init__(self, classes=['No swimming pool', 'Swimming pool'], max_chip_hw=125,
                 min_chip_hw=0, batch_size=32, input_shape=(3, 125, 125), fc=False,
                 old_model=False, small_model=False, model_name=None, learning_rate = 0.001,
-                bit_depth=11, kernel_size=3):
+                bit_depth=8, kernel_size=3):
 
         self.nb_classes = len(classes)
         self.classes = classes
@@ -192,10 +194,12 @@ class PoolNet(object):
         return model
 
 
-    def fit_from_geojson(self, train_shapefile, chips_per_batch = 5000,
-                         batches_per_epoch=4, validation_split=0.1, save_model=None,
-                         nb_epoch=10, shuffle_btwn_epochs=True, return_history=False,
-                         save_all_weights=True, retrain=False, lr_2=0.01, resize_dim=None):
+    def fit_from_geojson(self, train_shapefile, max_chip_hw=None, min_chip_hw=None,
+                         chips_per_batch = 5000, batches_per_epoch=4,
+                         validation_split=0.1, save_model=None, nb_epoch=10,
+                         shuffle_btwn_epochs=True, return_history=False,
+                         save_all_weights=True, retrain=False, lr_2=0.01,
+                         resize_dim=None):
         '''
         Fit a model using a generator that iteratively yields large batches of chips to
             train on for each epoch.
@@ -227,6 +231,13 @@ class PoolNet(object):
         OUTPUT  trained model, history
         '''
 
+        # Future: remove max/min dim args as class attributes
+        if not max_chip_hw:
+            max_chip_hw = self.input_shape[-1]
+
+        if not min_chip_hw:
+            min_chip_hw = self.min_chip_hw
+
         train_size = chips_per_batch * batches_per_epoch
         full_hist = []
 
@@ -257,8 +268,8 @@ class PoolNet(object):
 
             # extract validation chips
             print 'Getting validation data...\n'
-            valX, valY = de.get_data_from_polygon_list(val_data, min_chip_hw=self.min_chip_hw,
-                                                       max_chip_hw=self.max_chip_hw,
+            valX, valY = de.get_data_from_polygon_list(val_data, min_chip_hw=min_chip_hw,
+                                                       max_chip_hw=max_chip_hw,
                                                        classes=self.classes, normalize=True,
                                                        return_labels=True,
                                                        bit_depth=self.bit_depth, mask=True,
@@ -287,8 +298,8 @@ class PoolNet(object):
 
                 # extract chips from each batch to train on
                 X, Y = de.get_data_from_polygon_list(this_batch,
-                                                     min_chip_hw=self.min_chip_hw,
-                                                     max_chip_hw=self.max_chip_hw,
+                                                     min_chip_hw=min_chip_hw,
+                                                     max_chip_hw=max_chip_hw,
                                                      classes=self.classes, normalize=True,
                                                      return_labels=True,
                                                      bit_depth=self.bit_depth, mask=True,
@@ -327,6 +338,7 @@ class PoolNet(object):
         if return_history:
             return full_hist
 
+
     def fit_xy(self, X_train, Y_train, validation_split=0.1,
                       save_model = None, nb_epoch=15):
         '''
@@ -352,35 +364,6 @@ class PoolNet(object):
 
         if save_model:
             self.save_model(save_model)
-
-
-    def retrain_output(self, X_train, Y_train, learning_rate=0.01, **kwargs):
-        '''
-        Retrains last dense layer of model on chips loaded into memory. For use with
-            unbalanced classes after training on balanced data.
-        INPUT   X_train(array): Training chips with the following dimensions:
-                    (train_size, num_channels, rows, cols)
-                Y_train (list): One-hot encoded labels to X_train with dimenstions as
-                    follows: (train_size, n_classes)
-                learning_rate (float): Learning rate
-                validation_split (float): Proportion of X_train to validate on while
-                    training.
-                save_model (string): Name under which to save model. if None, does not
-                    save model. Defualts to None.
-                nb_epoch (int): Number of training epochs to complete
-        OUTPUT  (1) retrained model
-        '''
-        # freeze all layers except final dense
-        for i in xrange(len(self.model.layers[:-1])):
-            self.model.layers[i].trainable = False
-
-        # recompile model
-        sgd = SGD(lr=learning_rate, momentum=0.9, nesterov=True)
-        self.model.compile(loss='categorical_crossentropy', optimizer='sgd')
-
-        # train model
-        self.fit_xy(X_train, Y_train, **kwargs)
-
 
 
     def save_model(self, model_name):
@@ -420,7 +403,8 @@ class PoolNet(object):
 
 
     def classify_geojson(self, geoj, output_name, numerical_classes=True,
-                         resize_dim=None, img_name=None):
+                         resize_dim=None, img_name=None, max_chip_hw=None,
+                         min_chip_hw=None):
         '''
         Use the current model and weights to classify all polygons (of appropriate size)
         in the given geojson. Records PoolNet classification, whether or not it was
@@ -434,6 +418,12 @@ class PoolNet(object):
                 image_name (string): name of the associated geotiff image if different
                     than catalog number. Defaults to None
         '''
+        # Future: remove max/min dim args as class attributes
+        if not max_chip_hw:
+            max_chip_hw = self.input_shape[-1]
+
+        if not min_chip_hw:
+            min_chip_hw = self.min_chip_hw
 
         yprob, ytrue = [], []
         if output_name.endswith('.geojson'):
@@ -445,13 +435,13 @@ class PoolNet(object):
         with open(geoj) as f:
             features = geojson.load(f)['features']
 
-        # Classeify in batches of 1000
+        # Classify in batches of 1000
         for ix in xrange(0, len(features), 1000):
             this_batch = features[ix: (ix + 1000)]
             try:
                 X = de.get_data_from_polygon_list(this_batch,
-                                                  min_chip_hw=self.min_chip_hw,
-                                                  max_chip_hw=self.max_chip_hw,
+                                                  min_chip_hw=min_chip_hw,
+                                                  max_chip_hw=max_chip_hw,
                                                   classes=self.classes, normalize=True,
                                                   return_labels=False,
                                                   bit_depth=self.bit_depth, mask=True,
@@ -494,29 +484,6 @@ class PoolNet(object):
                     behead_ix = i - 1
         return behead_ix
 
-    def _get_val_data(self, shapefile, val_size):
-        '''
-        hacky... don't use for actual training purposes.
-        creates validation data from input shapefile to use with fit_generator function
-        '''
-        # shuffle features in orig shapefile, use for val data
-        with open(shapefile) as f:
-            data = geojson.load(f)
-            feats = data['features']
-            np.random.shuffle(feats)
-            data['features'] = feats
-
-        with open('tmp_val.geojson', 'w') as f:
-            geojson.dump(data, f)
-
-        val_gen = getIterData('tmp_val.geojson', batch_size=val_size,
-                              min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
-                              classes=self.classes, bit_depth=self.bit_depth,
-                              show_percentage=False)
-
-        x, y = val_gen.next()
-        subprocess.call('rm tmp_val.geojson', shell=True)
-        return x, y
 
     def make_fc_model(self):
         '''
@@ -547,98 +514,6 @@ class PoolNet(object):
         print 'Done.'
         return model
 
-
-    def fit_generator(self, train_shapefile, train_size=10000, save_model=None,
-                      nb_epoch=5, validation_prop=0.1):
-        '''
-        Fit a model using a generator that yields a large batch of chips to train on.
-        INPUT   (1) string 'train_shapefile': filename for the training data (must be a
-                    geojson)
-                (2) int 'train_size': number of chips to train model on. Defaults to 10000
-                (3) string 'save_model': name of model for saving. if None, does not
-                    save model.
-                (4) int 'nb_epoch': Number of epochs to train for
-                (5) float 'validation_prop': proportion of training data to use for
-                    validation. defaults to 0.1. Does not do validation if validation_prop
-                    is None.
-        OUTPUT  (1) trained model.
-        '''
-        # es = EarlyStopping(monitor='val_loss', patience=1, verbose=1)
-        data_gen = getIterData(train_shapefile, batch_size=self.batch_size,
-                               min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
-                               classes=self.classes, bit_depth=self.bit_depth, cycle=True,
-                               show_percentage=False)
-
-        if validation_prop:
-            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{val_loss:.2f}.h5",
-                                           verbose=1, save_weights_only=True)
-            valX, valY = self._get_val_data(train_shapefile,
-                                            int(validation_prop * train_size))
-
-            self.model.fit_generator(data_gen, samples_per_epoch=train_size,
-                                     nb_epoch=nb_epoch, callbacks=[checkpointer],
-                                     validation_data = (valX, valY))
-
-        else:
-            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{loss:.2f}.h5",
-                                           verbose=1, save_weights_only=True)
-            self.model.fit_generator(data_gen, samples_per_epoch=train_size,
-                                     nb_epoch=nb_epoch, callbacks=[checkpointer])
-
-        if save_model:
-            self.save_model(save_model)
-
-
-    def retrain_output_on_generator(self, train_shapefile, retrain_size=5000,
-                                    learning_rate=0.01, save_model=None, nb_epoch=5,
-                                    validation_prop=0.1):
-        '''
-        Retrains last dense layer of model with a generator. For use with unbalanced
-        classes after training on balanced data.
-        INPUT   (1) string 'train_shapefile': filename for the training data (must be a
-                    geojson)
-                (2) int 'train_size': number of chips to train model on. Defaults to 5000
-                (3) float 'lr'
-                (4) string 'save_model': name of model for saving. if None, does not
-                    save model.
-                (5) int 'nb_epoch': Number of epochs to train for. Defaults to 5
-                (6) float 'validation_prop': proportion of training data to use for
-                    validation. defaults to 0.1. Does not do validation if validation_prop
-                    is None.
-
-        OUTPUT  (1) retrained model.
-        '''
-        # freeze all layers except final dense
-        for i in xrange(len(self.model.layers[:-1])):
-            self.model.layers[i].trainable = False
-
-        # recompile model
-        sgd = SGD(lr=learning_rate, momentum=0.9, nesterov=True)
-        self.model.compile(loss='categorical_crossentropy', optimizer='sgd')
-
-        # train model with frozen weights
-        data_gen = getIterData(train_shapefile, batch_size=self.batch_size,
-                               min_chip_hw=self.min_chip_hw, max_chip_hw=self.max_chip_hw,
-                               classes=self.classes, bit_depth=self.bit_depth, cycle=True,
-                               show_percentage=False)
-
-        if validation_prop:
-            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{val_loss:.2f}.h5",
-                                           verbose=1, save_weights_only=True)
-            valX, valY = self._get_val_data(train_shapefile,
-                                            int(validation_prop * retrain_size))
-
-            self.model.fit_generator(data_gen, samples_per_epoch=retrain_size,
-                                     nb_epoch=nb_epoch, callbacks=[checkpointer],
-                                     validation_data=(valX, valY))
-
-        else:
-            checkpointer = ModelCheckpoint(filepath="./models/epoch_{epoch:02d}-{loss:.2f}.h5",
-                                           verbose=1, save_weights_only=True)
-            self.model.fit_generator(data_gen, samples_per_epoch=retrain_size)
-
-        if save_model:
-            self.save_model(save_model)
 
     def evaluate_model(self, X_test, Y_test, return_yhat=False):
         '''
