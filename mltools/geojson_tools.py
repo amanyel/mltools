@@ -284,11 +284,11 @@ def create_balanced_geojson(input_file, classes, output_file='balanced.geojson',
         geojson.dump(data, f)
 
 
-def filter_polygon_size(geojson_file, output_file, min_side_dim=0, max_side_dim=125,
+def filter_polygon_size(input_file, output_file, min_side_dim=0, max_side_dim=125,
                         shuffle=False, make_omitted_files=False):
     '''
     Create a geojson file containing only polygons with acceptable side dimensions.
-    INPUT   geojson_file (string): File name
+    INPUT   input_file (string): File name
             output_file (string): Name under which to save filtered polygons.
             min_side_dim (int): Minimum acceptable side length (in pixels) for
                 each polygon. Defaults to 0.
@@ -306,7 +306,7 @@ def filter_polygon_size(geojson_file, output_file, min_side_dim=0, max_side_dim=
         sys.stdout.flush()
 
     # load polygons
-    with open(geojson_file) as f:
+    with open(input_file) as f:
         data = geojson.load(f)
         total_features = float(len(data['features']))
 
@@ -316,7 +316,7 @@ def filter_polygon_size(geojson_file, output_file, min_side_dim=0, max_side_dim=
 
     # find indicies of acceptable polygons
     ix_ok, small_ix, large_ix = [], [], []
-    img_ids = find_unique_values(geojson_file, property_name='image_id')
+    img_ids = find_unique_values(input_file, property_name='image_id')
 
     print 'Filtering polygons... \n'
     for img_id in img_ids:
@@ -332,7 +332,7 @@ def filter_polygon_size(geojson_file, output_file, min_side_dim=0, max_side_dim=
             img = geoio.GeoImage('tmp.vrt')
 
         # cycle thru polygons
-        for chip, properties in img.iter_vector(vector=geojson_file,
+        for chip, properties in img.iter_vector(vector=input_file,
                                                 properties=True,
                                                 filter=[{'image_id': img_id}],
                                                 mask=True):
