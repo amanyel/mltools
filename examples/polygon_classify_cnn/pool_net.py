@@ -22,7 +22,9 @@ class PoolNet(object):
             batch_size (int): Amount of images to use for each batch during training.
                 Defaults to 32.
             input_shape (tuple[int]): Shape of input chips with theano dimensional
-                ordering (n_channels, height, width). Height and width must be equal.
+                ordering (n_channels, height, width). Height and width must be equal. If
+                an old model is loaded (old_model_name is not None), input shape will be
+                automatically set from the architecture and does not need to be specified.
                 Defaults to (3,125,125).
             old_model_name (str): Name of previous model to load (not including file
                 extension). There should be a json architecture file and HDF5 ('.h5')
@@ -382,7 +384,7 @@ class PoolNet(object):
 
 
     def classify_geojson(self, target_geojson, output_name, max_side_dim=None,
-                         min_side_dim=0, numerical_classes=False, chips_in_mem=5000,
+                         min_side_dim=0, numerical_classes=True, chips_in_mem=5000,
                          bit_depth=8):
         '''
         Use the current model and weights to classify all polygons in target_geojson. The
@@ -405,7 +407,7 @@ class PoolNet(object):
                     chip. Defaults to 0.
                 numerical_classes (bool): Make output classifications correspond to the
                     indicies (base 0) of the 'classes' attribute. If False, 'CNN_class'
-                    is a string with the class name. Defaults to False.
+                    is a string with the class name. Defaults to True.
                 chips_in_mem (int): Number of chips to load in memory at once. Decrease
                     this parameter for larger chip sizes. Defaults to 5000.
                 bit_depth (int): Bit depth of the image strips from which training chips
