@@ -150,7 +150,7 @@ def apply_mask(input_file, mask_file, output_file):
     source_ds, dst_ds = None, None
 
 
-def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
+def get_iter_data(shapefile, batch_size=32, min_side_dim=0, max_side_dim=125,
                   classes=['No swimming pool', 'Swimming pool'], return_id = False,
                   normalize=True, img_name=None, return_labels=True, bit_depth=8,
                   image_id=None, show_percentage=True, mask=True, **kwargs):
@@ -161,9 +161,9 @@ def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
 
     INPUT   shapefile (string): name of shapefile to extract polygons from
             batch_size (int): number of chips to generate each iteration
-            min_chip_hw (int): minimum size acceptable (in pixels) for a polygon.
+            min_side_dim (int): minimum size acceptable (in pixels) for a polygon.
                 defaults to 10.
-            max_chip_hw (int): maximum size acceptable (in pixels) for a polygon. Note
+            max_side_dim (int): maximum size acceptable (in pixels) for a polygon. Note
                 that this will be the size of the height and width of input images to the
                 net. defaults to 125.
             classes (list['string']): name of classes for chips. Defualts to swimming
@@ -230,9 +230,9 @@ def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
                 continue
 
             chan, h, w = np.shape(chip)
-            pad_h, pad_w = max_chip_hw - h, max_chip_hw - w
+            pad_h, pad_w = max_side_dim - h, max_side_dim - w
 
-            if min(h, w) < min_chip_hw or max(h, w) > max_chip_hw:
+            if min(h, w) < min_side_dim or max(h, w) > max_side_dim:
                 if show_percentage:
                     sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(batch_size)) + ' ' * 5)
                     sys.stdout.flush()
@@ -300,7 +300,7 @@ def get_iter_data(shapefile, batch_size=32, min_chip_hw=0, max_chip_hw=125,
         yield data
 
 
-def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
+def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
                                classes=['No swimming pool', 'Swimming pool'],
                                normalize=True, return_id=False, return_labels=True,
                                bit_depth=8, mask=True, show_percentage=True,
@@ -309,7 +309,7 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
     Returns pixel intensity array given a list of polygons (features) from an open geojson
         file. All chips woll be of usiform size. This enables extraction of pixel data
         multiple image strips using polygons not saved to disk. Will only return polygons
-        of valid size (between min_chip_hw and max_chip_hw).
+        of valid size (between min_side_dim and max_side_dim).
 
     Each image strip referenced in the image_id properties of
         polygons must be  in the working directory and named as follows: <image_id>.tif
@@ -317,9 +317,9 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
     INPUTS  features (list): list of polygon features from an open geojson file.
                 IMPORTANT: Geometries must be in the same projection as the imagery! No
                 projection checking is done!
-            min_chip_hw (int): minimum size acceptable (in pixels) for a polygon.
+            min_side_dim (int): minimum size acceptable (in pixels) for a polygon.
                 defaults to 10.
-            max_chip_hw (int): maximum size acceptable (in pixels) for a polygon. Note
+            max_side_dim (int): maximum size acceptable (in pixels) for a polygon. Note
                 that this will be the size of the height and width of all output chips.
                 defaults to 125.
             classes (list['string']): name of classes for chips. Defualts to swimming
@@ -335,7 +335,7 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
             show_percentage (bool): Print percent of chips collected to stdout. Defaults
                 to True
             assert_all_valid (bool): Throw an error if any of the included polygons do not
-                match the size criteria (defined by min and max_chip_hw), or are returned
+                match the size criteria (defined by min and max_side_dim), or are returned
                 as None from geoio. Defaults to False.
             resize_dim (tup): Dimensions to reshape chips into after padding. Use for
                 downsampling large chips. Dimensions: (n_chan, rows, cols). Defaults to
@@ -350,7 +350,7 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
                 to both dimensions. If a list of two ints, they will be interpreted as
                 xpad and ypad.
 
-    OUTPUT  (chips, labels). Chips will be of size (n_bands, max_chip_hw, max_chip_hw).
+    OUTPUT  (chips, labels). Chips will be of size (n_bands, max_side_dim, max_side_dim).
                 Polygons will be zero-padded to the proper shape
     '''
 
@@ -390,9 +390,9 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
 
         # check for adequate chip size
         chan, h, w = np.shape(chip)
-        pad_h, pad_w = max_chip_hw - h, max_chip_hw - w
+        pad_h, pad_w = max_side_dim - h, max_side_dim - w
 
-        if min(h, w) < min_chip_hw or max(h, w) > max_chip_hw:
+        if min(h, w) < min_side_dim or max(h, w) > max_side_dim:
             if show_percentage:
                 sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 5)
                 sys.stdout.flush()
@@ -402,7 +402,7 @@ def get_data_from_polygon_list(features, min_chip_hw=0, max_chip_hw=125,
                                      'set assert_all_valid to False.')
             continue
 
-        # zero-pad polygons to (n_bands, max_chip_hw, max_chip_hw)
+        # zero-pad polygons to (n_bands, max_side_dim, max_side_dim)
         chip = chip.filled(0).astype(float)  # replace masked entries with zeros
         chip_patch = np.pad(chip, [(0, 0), (pad_h/2, (pad_h - pad_h/2)), (pad_w/2,
             (pad_w - pad_w/2))], 'constant', constant_values=0)
@@ -466,9 +466,9 @@ class getIterData(object):
                 Defaults to 10000
             classes (list['string']): name of classes for chips. Defualts to swimming
                 pool classes (['Swimming_pool', 'No_swimming_pool'])
-            min_chip_hw (int): minimum size acceptable (in pixels) for a polygon.
+            min_side_dim (int): minimum size acceptable (in pixels) for a polygon.
                 defaults to 30.
-            max_chip_hw (int): maximum size acceptable (in pixels) for a polygon. Note
+            max_side_dim (int): maximum size acceptable (in pixels) for a polygon. Note
                 that this will be the size of the height and width of input images to the
                 net. defaults to 125.
             return_labels (bool): Include labels in output. Defualts to True.
@@ -491,7 +491,7 @@ class getIterData(object):
             # y = labels associated with x
     '''
 
-    def __init__(self, shapefile, batch_size=10000, min_chip_hw=0, max_chip_hw=125,
+    def __init__(self, shapefile, batch_size=10000, min_side_dim=0, max_side_dim=125,
                  classes=['No swimming pool', 'Swimming pool'], return_labels=True,
                  return_id=False, mask=True, normalize=True, props=None, bit_depth=8,
                  show_percentage=True, cycle=False):
@@ -499,8 +499,8 @@ class getIterData(object):
         self.shapefile = shapefile
         self.batch_size = batch_size
         self.classes = classes
-        self.min_chip_hw = min_chip_hw
-        self.max_chip_hw = max_chip_hw
+        self.min_side_dim = min_side_dim
+        self.max_side_dim = max_side_dim
         self.return_labels = return_labels
         self.return_id = return_id
         self.mask = mask
@@ -618,8 +618,8 @@ class getIterData(object):
                 continue
 
             chan, h, w = np.shape(chip)
-            pad_h, pad_w = self.max_chip_hw - h, self.max_chip_hw - w
-            if min(h, w) < self.min_chip_hw or max(h, w) > self.max_chip_hw:
+            pad_h, pad_w = self.max_side_dim - h, self.max_side_dim - w
+            if min(h, w) < self.min_side_dim or max(h, w) > self.max_side_dim:
                 if self.show_percentage:
                     sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(batch)) + ' ' * 5)
                     sys.stdout.flush()
@@ -706,8 +706,8 @@ class getIterData(object):
                 continue
 
             chan, h, w = np.shape(chip)
-            pad_h, pad_w = self.max_chip_hw - h, self.max_chip_hw - w
-            if min(h, w) < self.min_chip_hw or max(h, w) > self.max_chip_hw:
+            pad_h, pad_w = self.max_side_dim - h, self.max_side_dim - w
+            if min(h, w) < self.min_side_dim or max(h, w) > self.max_side_dim:
                 if self.show_percentage:
                     sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(batch)) + ' ' * 5)
                     sys.stdout.flush()

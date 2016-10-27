@@ -121,8 +121,7 @@ def write_to(data, property_names, output_file):
         geojson.dump(feature_collection, f)
 
 
-def write_properties_to(data, property_names, input_file,
-                        output_file, filter=None):
+def write_properties_to(data, property_names, input_file, output_file, filter=None):
     '''
     Writes property data to polygon_file for all
        geometries indicated in the filter, and creates output file.
@@ -285,15 +284,15 @@ def create_balanced_geojson(input_file, classes, output_file='balanced.geojson',
         geojson.dump(data, f)
 
 
-def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon_hw=125,
+def filter_polygon_size(geojson_file, output_file, min_side_dim=0, max_side_dim=125,
                         shuffle=False, make_omitted_files=False):
     '''
     Create a geojson file containing only polygons with acceptable side dimensions.
     INPUT   geojson_file (string): File name
             output_file (string): Name under which to save filtered polygons.
-            min_polygon_hw (int): Minimum acceptable side length (in pixels) for
+            min_side_dim (int): Minimum acceptable side length (in pixels) for
                 each polygon. Defaults to 0.
-            max_polygon_hw (int): Maximum acceptable side length (in pixels) for
+            max_side_dim (int): Maximum acceptable side length (in pixels) for
                 each polygon. Defaults to 125.
             shuffle (bool): Shuffle polygons before saving to output file. Defaults to
                 False.
@@ -345,13 +344,13 @@ def filter_polygon_size(geojson_file, output_file, min_polygon_hw=0, max_polygon
             chan,h,w = np.shape(chip)
 
             # Identify small chips
-            if min(h, w) < min_polygon_hw:
+            if min(h, w) < min_side_dim:
                 small_ix.append(ix - 1)
                 write_status(100 * ix / total_features)
                 continue
 
             # Identify large chips
-            elif max(h, w) > max_polygon_hw:
+            elif max(h, w) > max_side_dim:
                 large_ix.append(ix - 1)
                 write_status(100 * ix / total_features)
                 continue
