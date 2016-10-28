@@ -7,6 +7,7 @@ import geojson
 import geojson_tools as gt
 import numpy as np
 import sys
+import warnings
 from scipy.misc import imresize
 from itertools import cycle
 import osgeo.gdal as gdal
@@ -150,7 +151,7 @@ def apply_mask(input_file, mask_file, output_file):
     source_ds, dst_ds = None, None
 
 
-def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
+def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125, num_chips=None,
                                classes=['No swimming pool', 'Swimming pool'],
                                normalize=True, return_id=False, return_labels=True,
                                bit_depth=8, mask=True, show_percentage=True,
@@ -170,6 +171,8 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
             max_side_dim (int): maximum size acceptable (in pixels) for a polygon. Note
                 that this will be the size of the height and width of all output chips.
                 defaults to 125.
+            num_chips (int): Maximum number of chips to return. If None, all valid chips
+                from features will be returned. Defaults to None.
             classes (list['string']): name of classes for chips. Defualts to swimming
                 pool classes (['Swimming_pool', 'No_swimming_pool'])
             normalize (bool): divide all chips by max pixel intensity (normalize net
@@ -198,18 +201,27 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
                 to both dimensions. If a list of two ints, they will be interpreted as
                 xpad and ypad.
 
-    OUTPUT  (chips, labels). Chips will have the following dimensions:
-                (n_bands, max_side_dim, max_side_dim), will be zero-padded to the proper
-                shape if mask is True. Labels will be one-hot encoded and have the
-                follwoing dimensions: (n_chips, n_classes)
+    OUTPUT  chips (array): Uniformly sized chips with the following dimensions:
+                (num_chips, num_channels, max_side_dim, max_side_dim)
+            ids (list): Feature ids corresponding to chips.
+            labels (array): One-hot encoded labels for chips with the follwoing
+                dimensions: (num_chips, num_classes)
     '''
 
-    inputs, labels, ids = [], [], []
-    ct, total = 0, len(features)
-    nb_classes = len(classes)
-    cls_dict = {classes[i]: i for i in xrange(len(classes))}
-    imgs = {} # {image id: open image}
+    ct, inputs, labels, ids = 0, [], [], [], len(classes)
+    total = len(features) if not num_chips else num_chips
+    cls_dict, imgs = {classes[i]: i for i in xrange(len(classes))}, {}
 
+    def write_status(ct, chip_err=False):
+        '''helper function to write percent complete to stdout + raise AssertionError'''
+        if show_percentage:
+            sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 20)
+            sys.stdout.flush()
+
+        if chip_err and assert_all_valid:
+            raise AssertionError('One or more invalid polygons. Please make sure all ' \
+                                 'polygons are valid or set assert_all_valid to False.')
+        return ct + 1
 
     # cycle through polygons and get pixel data
     for poly in features:
@@ -228,13 +240,7 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
         # call get_data on polygon geom
         chip = imgs[id].get_data_from_coords(coords, mask=mask, **kwargs)
         if chip is None:
-            if show_percentage:
-                sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 5)
-                sys.stdout.flush()
-            if assert_all_valid:
-                raise AssertionError('One or more invalid polygons. Please make ' \
-                                     'sure all polygons are valid or set ' \
-                                     'assert_all_valid to False.')
+            ct = write_status(100 * ct / float(total), ct, chip_err=True)
             continue
 
         # check for adequate chip size
@@ -242,25 +248,20 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
         pad_h, pad_w = max_side_dim - h, max_side_dim - w
 
         if min(h, w) < min_side_dim or max(h, w) > max_side_dim:
-            if show_percentage:
-                sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 5)
-                sys.stdout.flush()
-            if assert_all_valid:
-                raise AssertionError('One or more polygons do not meet the size ' \
-                                     'requirements. Please filter the geojson first or ' \
-                                     'set assert_all_valid to False.')
+            ct = write_status(ct, chip_err=True)
             continue
 
         # zero-pad polygons to (n_bands, max_side_dim, max_side_dim)
-        chip = chip.filled(0).astype(float)  # replace masked entries with zeros
+        chip = chip.filled(0).astype(float) if mask else chip
         chip_patch = np.pad(chip, [(0, 0), (pad_h/2, (pad_h - pad_h/2)), (pad_w/2,
-            (pad_w - pad_w/2))], 'constant', constant_values=0)
+                            (pad_w - pad_w/2))], 'constant', constant_values=0)
 
         # resize chip
         if resize_dim:
             new_chip = []
             for band_ix in xrange(len(chip_patch)):
-                new_chip.append(imresize(chip_patch[band_ix], resize_dim[-2:]).astype(float))
+                new_chip.append(imresize(chip_patch[band_ix],
+                                resize_dim[-2:]).astype(float))
             chip_patch = np.array(new_chip)
 
         # norm pixel intenisty from 0 to 1
@@ -273,9 +274,12 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
             try:
                 label = poly['properties']['class_name']
                 if label is None:
+                    ct = write_status(ct, chip_err=True)
                     continue
                 labels.append(cls_dict[label])
+
             except (TypeError, KeyError):
+                ct = write_status(ct, chip_err=True)
                 continue
 
         # get feature ids
@@ -285,10 +289,11 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
 
         # append chip to inputs
         inputs.append(chip_patch)
-        ct += 1
-        if show_percentage:
-            sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 5)
-            sys.stdout.flush()
+        ct = write_status(ct)
+
+        if num_chips:
+            if len(inputs) == num_chips:
+                break
 
     # combine data
     inputs = [np.array([i for i in inputs])]
@@ -306,25 +311,58 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125,
     return inputs
 
 
-def get_iter_data(geojson_file, batch_size=32, **kwargs):
+def get_uniform_chips(input_file, num_chips=None, **kwargs):
     '''
-    Generate batches of uniformly-sized pixel intensity arrays from image strips using a
-        geojson file. Output will be in the same format as get_data_from_polygon_list.
+    Get uniformly-sized pixel intensity arrays from image strips using a geojson file.
+        Output will be in the same format as get_data_from_polygon_list.
 
-    INPUT   geojson_file (str): File name
-            batch_size (int): Number of chips to yield per iteration
+    INPUT   input_file (str): File name. This file should be filtered for polygon size
+            num_chips (int): Maximum number of chips to return. If None will return all
+                chips in input_file. Defaults to None
 
             kwargs:
             -------
             See get_data_from_polygon_list docstring for other input params
 
-    OUTPUT  (chips, labels). Chips will have the following dimensions:
-                (n_bands, max_side_dim, max_side_dim), will be zero-padded to the proper
-                shape if mask is True. Labels will be one-hot encoded and have the
-                follwoing dimensions: (n_chips, n_classes)
+    OUTPUT  chips (array): Uniformly sized chips with the following dimensions:
+                (num_chips, num_channels, max_side_dim, max_side_dim)
+            ids (list): Feature ids corresponding to chips.
+            labels (array): One-hot encoded labels for chips with the follwoing
+                dimensions: (num_chips, num_classes)
     '''
-    # Load features from geojson_file
-    with open(geojson_file) as f:
+
+    # Load features from input_file
+    with open(input_file) as f:
+        feature_collection = geojson.load(f)['features']
+
+    if num_chips:
+        feature_collection = feature_collection[: num_chips]
+
+    return get_data_from_polygon_list(feature_collection, num_chips=num_chips, **kwargs)
+
+
+def uniform_chip_generator(input_file, batch_size=32, **kwargs):
+    '''
+    Generate batches of uniformly-sized pixel intensity arrays from image strips using a
+        geojson file. Output will be in the same format as get_data_from_polygon_list.
+
+    INPUT   input_file (str): File name
+            batch_size (int): Number of chips to yield per iteration
+
+            kwargs:
+            -------
+            See get_data_from_polygon_list docstring for other input params. Do not use
+                the num_chips arg.
+
+    OUTPUT  chips (array): Uniformly sized chips with the following dimensions:
+                (num_chips, num_channels, max_side_dim, max_side_dim)
+            ids (list): Feature ids corresponding to chips.
+            labels (array): One-hot encoded labels for chips with the follwoing
+                dimensions: (num_chips, num_classes)
+    '''
+
+    # Load features from input_file
+    with open(input_file) as f:
         feature_collection = geojson.load(f)['features']
 
     # Produce batches using get_data_from_polygon_list
