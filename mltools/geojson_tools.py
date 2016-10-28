@@ -189,14 +189,46 @@ def find_unique_values(input_file, property_name):
     return np.unique(values)
 
 
+def filter_by_property(input_file, output_file, property_name, values):
+    '''
+    Create a file containing only features with specified property value(s) from
+        input_file.
+
+    INPUT   input_file (str): File name.
+            output_file (str): Output file name.
+            property_name (str): Name of the feature property to filter by.
+            values (list): Value(s) a feature may have for property_name if it is to be
+                included in output_file.
+    '''
+    
+    filtered_feats = []
+    if not output_file.endswith('.geojson'):
+        output_file += '.geojson'
+
+    # Load feature list
+    with open(input_file) as f:
+        feature_collection = geojson.load(f)
+
+    # Filter feats by property_name
+    for feat in feature_collection['features']:
+        if feat['properties'][property_name] in values:
+            filtered_feats.append(feat)
+
+    feature_collection['features'] = filtered_feats
+
+    # Save filtered file
+    with open(output_file, 'wb') as f:
+        geojson.dump(f)
+
+
 def create_train_test(input_file, output_file=None, test_size=0.2):
     '''
     Split a geojson file into train and test features. Saves features as geojsons in the
         working directory under the same file name with train and test prefixes to the
         original file name.
 
-    INPUTS  input_file (string): File name
-            output_file (string): Name to use after the train_ and test_ prefixes for the
+    INPUT   input_file (str): File name
+            output_file (str): Name to use after the train_ and test_ prefixes for the
                 saved files. Defaults to name of input_file.
             test_size (float or int): Amount of features to set aside as test data. If
                 less than one will be interpreted as a proportion of the total feature
@@ -237,11 +269,11 @@ def create_balanced_geojson(input_file, classes, output_file='balanced.geojson',
     Create a geojson comprised of balanced classes from input_file for training data.
         Randomly selects polygons from all classes.
 
-    INPUTS  input_file (string): File name
-            classes (list[string]): Classes in input_file to include in the balanced
+    INPUT   input_file (str): File name
+            classes (list[str]): Classes in input_file to include in the balanced
                 output file. Must exactly match the 'class_name' property in the features
                 of input_file.
-            output_file (string): Name under which to save the balanced output file.
+            output_file (str): Name under which to save the balanced output file.
                 Defualts to balanced.geojson.
             samples_per_class (int or None): Number of features to select per class in
                 input_file. If None will use the smallest class size. Defaults to None.
@@ -288,8 +320,8 @@ def filter_polygon_size(input_file, output_file, min_side_dim=0, max_side_dim=12
                         shuffle=False, make_omitted_files=False):
     '''
     Create a geojson file containing only polygons with acceptable side dimensions.
-    INPUT   input_file (string): File name
-            output_file (string): Name under which to save filtered polygons.
+    INPUT   input_file (str): File name
+            output_file (str): Name under which to save filtered polygons.
             min_side_dim (int): Minimum acceptable side length (in pixels) for
                 each polygon. Defaults to 0.
             max_side_dim (int): Maximum acceptable side length (in pixels) for
@@ -300,6 +332,7 @@ def filter_polygon_size(input_file, output_file, min_side_dim=0, max_side_dim=12
                 are created: one with polygons that are too small and one with large
                 polygons. Defaults to False.
     '''
+
     def write_status(percent_complete):
         '''helper function to write percent complete to stdout'''
         sys.stdout.write('\r%{0:.2f}'.format(percent_complete) + ' ' * 20)
