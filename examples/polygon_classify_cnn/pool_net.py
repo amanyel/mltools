@@ -206,7 +206,7 @@ class PoolNet(object):
 
 
     def fit_from_geojson(self, train_geojson, max_side_dim=None, min_side_dim=0,
-                         chips_per_batch=5000, train_size=1000, validation_split=0.1,
+                         chips_per_batch=5000, train_size=10000, validation_split=0.1,
                          bit_depth=8, save_model=None, nb_epoch=10,
                          shuffle_btwn_epochs=True, return_history=False,
                          save_all_weights=True, retrain=False, learning_rate_2=0.01):
