@@ -251,7 +251,7 @@ class PoolNet(object):
                     Only relevant if retrain is True. Defaults to 0.01.
         OUTPUT  trained model, history
         '''
-        resize_dim, validation_data, callbacks, full_hist = None, None, [], []
+        resize_dim, validation_data, full_hist = None, None, []
 
         # load geojson training polygons
         with open(train_geojson) as f:
@@ -310,6 +310,7 @@ class PoolNet(object):
 
             # Cycle through batches of chips and train
             for batch_start in range(0, train_size, chips_per_batch):
+                callbacks = []
                 this_batch = polygons[batch_start: batch_start + chips_per_batch]
 
                 # Get chips from batch
