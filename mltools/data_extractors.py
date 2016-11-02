@@ -208,14 +208,14 @@ def get_data_from_polygon_list(features, min_side_dim=0, max_side_dim=125, num_c
                 dimensions: (num_chips, num_classes)
     '''
 
-    ct, inputs, labels, ids = 0, [], [], [], len(classes)
+    ct, inputs, labels, ids, nb_classes = 0, [], [], [], len(classes)
     total = len(features) if not num_chips else num_chips
     cls_dict, imgs = {classes[i]: i for i in xrange(len(classes))}, {}
 
     def write_status(ct, chip_err=False):
         '''helper function to write percent complete to stdout + raise AssertionError'''
         if show_percentage:
-            sys.stdout.write('\r%{0:.2f}'.format(100 * ct / float(total)) + ' ' * 20)
+            sys.stdout.write('\r%{0:.2f}'.format(100 * (ct + 1) / float(total)) + ' ' * 20)
             sys.stdout.flush()
 
         if chip_err and assert_all_valid:
