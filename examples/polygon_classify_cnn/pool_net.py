@@ -463,3 +463,23 @@ class PoolNet(object):
         property_names = ['CNN_class', 'certainty']
         gt.write_properties_to(data, property_names=property_names,
                                input_file=target_geojson, output_file=output_name)
+
+
+
+# Tools for analyzing network performance
+
+def x_to_rgb(X):
+    '''
+    Transform a normalized (3,h,w) image (theano ordering) to a (h,w,3) rgb image
+    (tensor flow).
+    Use this to view or save rgb polygons as images.
+
+    INPUT   (1) 3d array 'X': originial chip with theano dimensional ordering (3, h, w)
+    OUTPUT  (1) 3d array: rgb image in tensor flow dim-prdering (h,w,3)
+    '''
+
+    rgb_array = np.zeros((X.shape[1], X.shape[2], 3), 'uint8')
+    rgb_array[...,0] = X[0] * 255
+    rgb_array[...,1] = X[1] * 255
+    rgb_array[...,2] = X[2] * 255
+    return rgb_array
