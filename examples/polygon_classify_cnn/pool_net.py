@@ -355,6 +355,17 @@ class PoolNet(object):
                 save_model (string): Name under which to save model. if None, does not
                     save model. Defualts to None.
                 nb_epoch (int): Number of training epochs to complete
+                shuffle_btwn_epochs (bool): Shuffle the features in train_geojson
+                    between each epoch. Defaults to True.
+                return_history (bool): Return a list containing metrics from past epochs.
+                    Defaults to False.
+                save_all_weights (bool): Save model weights after each epoch. A directory
+                    called models will be created in the working directory. Defaults to
+                    True.
+                retrain (bool): Freeze all layers except final softmax to retrain only
+                    the final weights of the model. Defaults to False
+                learning_rate_2 (float): Learning rate for the second round of training.
+                    Only relevant if retrain is True. Defaults to 0.01.
         OUTPUT  trained Keras model.
         '''
         callbacks = []
@@ -394,7 +405,7 @@ class PoolNet(object):
             result, and a 'certainty' property with the net's certainty in the assigned
             classification.
         Please ensure that your current working directory contains all imagery referenced
-            in the image_id property in train_geojson, and are named as follows:
+            in the image_id property in target_geojson, and are named as follows:
             <image_id>.tif, where image_id is the catalog id of the image.
 
         INPUT   target_geojson (string): Name of the geojson to classify. This file
