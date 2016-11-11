@@ -254,11 +254,11 @@ To minimize the false positive rate without severely reducing recall, we retrain
 
 Retrain final layer of network on unbalanced data as follows:  
 
-    ```python
-    p.fit_from_geojson(train_geojson = 'train_filtered.geojson', retrain = True,
-                       max_side_dim = 125, min_side_dim = 30, train_size = 5000,
-                       nb_epoch = 5, save_model = 'my_model_rnd2')  
-    ```
+```python
+p.fit_from_geojson(train_geojson = 'train_filtered.geojson', retrain = True,
+                   max_side_dim = 125, min_side_dim = 30, train_size = 5000,
+                   nb_epoch = 5, save_model = 'my_model_rnd2')  
+```
 
 
 ### Testing the Network  
