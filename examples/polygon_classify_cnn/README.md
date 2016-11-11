@@ -181,7 +181,7 @@ We initially filter properties.geojson to get rid of polygons that we have deeme
     from mltools import geojson_tools as gt
 
     gt.filter_polygon_size('properties.geojson', output_file = 'filtered_geojson.geojson',
-                           min_polygon_hw = 30, max_polygon_hw = 125)
+                           min_side_dim = 30, max_side_dim = 125)
     ```
 
 2. **Create train_filtered.geojson and test_filtered.geojson:**
@@ -206,11 +206,7 @@ We initially filter properties.geojson to get rid of polygons that we have deeme
 
 ### Training the Network  
 
-Before training the network, make sure to create a 'models/' folder in the directory from which you will be training the model. The model will automatically save the weights after each epoch of training to this directory. *You will get an IO error if you omit this step*:
-
-```bash
-mkdir models
-```
+We train this network in two rounds to address the issue of class imbalance. The first round takes place on balanced data and the second on the original distribution of classes.
 
 
 #### First Training Phase
@@ -229,6 +225,7 @@ To train the net we simply create an instance of PoolNet and then pass it the ap
 
     ```python
     from pool_net import PoolNet
+
     p = PoolNet(classes = ['No swimming pool', 'Swimming pool'], batch_size = 32,
                 input_shape = (3,125,125))
     ```
